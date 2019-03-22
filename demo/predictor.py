@@ -104,11 +104,15 @@ class COCODemo(object):
         show_mask_heatmaps=False,
         masks_per_dim=2,
         min_image_size=224,
+        device=None,
     ):
         self.cfg = cfg.clone()
         self.model = build_detection_model(cfg)
         self.model.eval()
-        self.device = torch.device(cfg.MODEL.DEVICE)
+        if device is not None:
+            self.device = device
+        else:
+            self.device = torch.device(cfg.MODEL.DEVICE)
         self.model.to(self.device)
         self.min_image_size = min_image_size
 
@@ -195,7 +199,7 @@ class COCODemo(object):
                 the BoxList via `prediction.fields()`
         """
         # apply pre-processing to image
-        image = self.transforms(original_image)
+        image = self.transforms(original_image).to(self.device)
         # convert to an ImageList, padded so that it is divisible by
         # cfg.DATALOADER.SIZE_DIVISIBILITY
         image_list = to_image_list(image, self.cfg.DATALOADER.SIZE_DIVISIBILITY)

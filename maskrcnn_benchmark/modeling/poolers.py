@@ -113,10 +113,19 @@ class Pooler(nn.Module):
             dtype=dtype,
             device=device,
         )
+        import torch_xla
         for level, (per_level_feature, pooler) in enumerate(zip(x, self.poolers)):
+            xla_device = per_level_feature.device
             idx_in_level = torch.nonzero(levels == level).squeeze(1)
             rois_per_level = rois[idx_in_level]
-            result[idx_in_level] = pooler(per_level_feature, rois_per_level)
+            import pdb
+            # pdb.set_trace()
+            torch_xla._XLAC._xla_sync_multi([per_level_feature, rois_per_level])
+            per_level_feature_cpu = per_level_feature.cpu().clone()
+            rois_per_level_cpu = rois_per_level.cpu().clone()
+
+            result[idx_in_level] = pooler(per_level_feature_cpu, rois_per_level_cpu).to(xla_device)
+            # result[idx_in_level] = pooler(per_level_feature, rois_per_level)
 
         return result
 
