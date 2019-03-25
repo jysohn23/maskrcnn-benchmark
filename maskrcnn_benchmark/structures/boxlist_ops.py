@@ -5,6 +5,7 @@ from .bounding_box import BoxList
 
 from maskrcnn_benchmark.layers import nms as _box_nms
 
+import torch_xla
 
 def boxlist_nms(boxlist, nms_thresh, max_proposals=-1, score_field="scores"):
     """
@@ -24,17 +25,13 @@ def boxlist_nms(boxlist, nms_thresh, max_proposals=-1, score_field="scores"):
     boxlist = boxlist.convert("xyxy")
     boxes = boxlist.bbox
     score = boxlist.get_field(score_field)
-    import torch_xla
     device = boxes.device
-    import pdb
-    # pdb.set_trace()
     torch_xla._XLAC._xla_sync_multi([boxes, score])
     boxes_cpu = boxes.cpu().clone()
     score_cpu = score.cpu().clone()
     keep = _box_nms(boxes_cpu, score_cpu, nms_thresh)
     keep = keep.to(device=device)
 
-    #print(keep)
     # keep = _box_nms(boxes, score, nms_thresh)
     if max_proposals > 0:
         keep = keep[: max_proposals]

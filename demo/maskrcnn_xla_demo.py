@@ -71,10 +71,10 @@ coco_demo = COCODemo(
     device=xla_device,
 )
 
-import pdb
-pdb.set_trace()
-
+# DEBUG with a small input
+# shape = image.shape
+# image = image[0:shape[0]//20, 0:shape[1]//20, :]
 predictions = coco_demo.run_on_opencv_image(image)
+print(torch_xla._XLAC._xla_metrics_report())
 
-# imshow(predictions)
 imsave(predictions)

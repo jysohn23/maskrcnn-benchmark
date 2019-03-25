@@ -58,7 +58,6 @@ class MaskRCNNFPNFeatureExtractor(nn.Module):
 
     def forward(self, x, proposals):
         import pdb
-        pdb.set_trace()
         x = self.pooler(x, proposals)
 
         for layer_name in self.blocks:
