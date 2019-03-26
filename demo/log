@@ -1,7 +1,0 @@
-> /scratch/oss/maskrcnn-benchmark/demo/maskrcnn_xla_demo.py(77)<module>()
--> predictions = coco_demo.run_on_opencv_image(image)
-(Pdb) --KeyboardInterrupt--
-(Pdb) --KeyboardInterrupt--
-(Pdb) --KeyboardInterrupt--
-(Pdb) --KeyboardInterrupt--
-(Pdb) 
