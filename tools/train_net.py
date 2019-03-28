@@ -25,10 +25,13 @@ from maskrcnn_benchmark.utils.imports import import_file
 from maskrcnn_benchmark.utils.logger import setup_logger
 from maskrcnn_benchmark.utils.miscellaneous import mkdir
 
+import torch_xla
+import torch_xla_py.utils as xu
+import torch_xla_py.xla_model as xm
 
 def train(cfg, local_rank, distributed):
     model = build_detection_model(cfg)
-    device = torch.device(cfg.MODEL.DEVICE)
+    device = xm.xla_device()
     model.to(device)
 
     optimizer = make_optimizer(cfg, model)
@@ -134,7 +137,7 @@ def main():
     args = parser.parse_args()
 
     num_gpus = int(os.environ["WORLD_SIZE"]) if "WORLD_SIZE" in os.environ else 1
-    args.distributed = num_gpus > 1
+    args.distributed = False
 
     if args.distributed:
         torch.cuda.set_device(args.local_rank)
@@ -164,7 +167,7 @@ def main():
         logger.info(config_str)
     logger.info("Running with config:\n{}".format(cfg))
 
-    model = train(cfg, args.local_rank, args.distributed)
+    model = train(cfg, args.local_rank, False)
 
     if not args.skip_test:
         run_test(cfg, model, args.distributed)

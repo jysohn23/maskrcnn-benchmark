@@ -9,6 +9,8 @@ import torch.distributed as dist
 from maskrcnn_benchmark.utils.comm import get_world_size
 from maskrcnn_benchmark.utils.metric_logger import MetricLogger
 
+import torch_xla
+import torch_xla_py.xla_model as xm
 
 def reduce_loss_dict(loss_dict):
     """
@@ -74,8 +76,9 @@ def do_train(
 
         optimizer.zero_grad()
         losses.backward()
-        optimizer.step()
-
+        # optimizer.step()
+        xm.optimizer_step(optimizer)
+        print(torch_xla._XLAC._xla_metrics_report())
         batch_time = time.time() - end
         end = time.time()
         meters.update(time=batch_time, data=data_time)
