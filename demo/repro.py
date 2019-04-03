@@ -10,3 +10,4 @@ a = torch.rand(4, 2).to(xla_device)
 b = torch.max(a, d)
 pdb.set_trace()
 print(b)
+

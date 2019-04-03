@@ -122,6 +122,8 @@ class PostProcessor(nn.Module):
             boxes_j = boxes[inds, j * 4 : (j + 1) * 4]
             boxlist_for_class = BoxList(boxes_j, boxlist.size, mode="xyxy")
             boxlist_for_class.add_field("scores", scores_j)
+            if len(boxlist_for_class) == 0:
+                continue
             boxlist_for_class = boxlist_nms(
                 boxlist_for_class, self.nms
             )
@@ -133,6 +135,8 @@ class PostProcessor(nn.Module):
 
         result = cat_boxlist(result)
         number_of_detections = len(result)
+        if number_of_detections == 0:
+            return result
 
         # Limit to max_per_image detections **over all classes**
         if number_of_detections > self.detections_per_img > 0:
