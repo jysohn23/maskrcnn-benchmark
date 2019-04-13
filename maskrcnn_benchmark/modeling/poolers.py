@@ -6,6 +6,7 @@ from torch import nn
 from maskrcnn_benchmark.layers import ROIAlign
 
 from .utils import cat
+import torch_xla
 
 
 class LevelMapper(object):
@@ -99,7 +100,11 @@ class Pooler(nn.Module):
         num_levels = len(self.poolers)
         rois = self.convert_to_roi_format(boxes)
         if num_levels == 1:
-            return self.poolers[0](x[0], rois)
+            torch_xla._XLAC._xla_sync_multi([x[0], rois])
+            x0_cpu = x[0].cpu().clone()
+            rois_cpu = rois.cpu().clone()
+            xla_device = rois.device
+            return self.poolers[0](x0_cpu, rois_cpu).to(xla_device)
 
         levels = self.map_levels(boxes)
 
@@ -113,7 +118,6 @@ class Pooler(nn.Module):
             dtype=dtype,
             device=device,
         )
-        import torch_xla
         for level, (per_level_feature, pooler) in enumerate(zip(x, self.poolers)):
             xla_device = per_level_feature.device
             idx_in_level = torch.nonzero(levels == level).squeeze(1)

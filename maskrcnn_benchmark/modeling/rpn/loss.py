@@ -40,8 +40,6 @@ class RPNLossComputation(object):
         self.discard_cases = ['not_visibility', 'between_thresholds']
 
     def match_targets_to_anchors(self, anchor, target, copied_fields=[]):
-        import pdb
-        pdb.set_trace()
         match_quality_matrix = boxlist_iou(target, anchor)
         matched_idxs = self.proposal_matcher(match_quality_matrix)
         # RPN doesn't need any fields from target
@@ -126,6 +124,8 @@ class RPNLossComputation(object):
             size_average=False,
         ) / (sampled_inds.numel())
 
+        import pdb
+        pdb.set_trace()
         objectness_loss = F.binary_cross_entropy_with_logits(
             objectness[sampled_inds], labels[sampled_inds]
         )

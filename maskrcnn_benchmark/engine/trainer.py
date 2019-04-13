@@ -65,9 +65,12 @@ def do_train(
         images = images.to(device)
         targets = [target.to(device) for target in targets]
 
+        import pdb
         loss_dict = model(images, targets)
+        pdb.set_trace()
 
         losses = sum(loss for loss in loss_dict.values())
+        # print(torch_xla._XLAC._xla_metrics_report())
 
         # reduce losses over all GPUs for logging purposes
         loss_dict_reduced = reduce_loss_dict(loss_dict)

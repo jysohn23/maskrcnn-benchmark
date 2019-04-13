@@ -84,8 +84,8 @@ def boxlist_iou(boxlist1, boxlist2):
 
     box1, box2 = boxlist1.bbox, boxlist2.bbox
 
-    lt = torch.max(box1[:, None, :2], box2[:, :2])  # [N,M,2]
-    rb = torch.min(box1[:, None, 2:], box2[:, 2:])  # [N,M,2]
+    lt = torch.max(box1[:, None, :2], box2[:, :2]) # [N,M,2]
+    rb = torch.min(box1[:, None, 2:], box2[:, 2:]) # [N,M,2]
 
     TO_REMOVE = 1
 
