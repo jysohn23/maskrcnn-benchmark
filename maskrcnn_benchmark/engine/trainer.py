@@ -2,6 +2,7 @@
 import datetime
 import logging
 import time
+import pdb
 
 import torch
 import torch.distributed as dist
@@ -65,9 +66,8 @@ def do_train(
         images = images.to(device)
         targets = [target.to(device) for target in targets]
 
-        import pdb
         loss_dict = model(images, targets)
-        pdb.set_trace()
+        # pdb.set_trace()
 
         losses = sum(loss for loss in loss_dict.values())
         # print(torch_xla._XLAC._xla_metrics_report())
@@ -81,6 +81,7 @@ def do_train(
         losses.backward()
         # optimizer.step()
         xm.optimizer_step(optimizer)
+        pdb.set_trace()
         print(torch_xla._XLAC._xla_metrics_report())
         batch_time = time.time() - end
         end = time.time()
@@ -89,7 +90,7 @@ def do_train(
         eta_seconds = meters.time.global_avg * (max_iter - iteration)
         eta_string = str(datetime.timedelta(seconds=int(eta_seconds)))
 
-        if iteration % 20 == 0 or iteration == max_iter:
+        if iteration % 1 == 0 or iteration == max_iter:
             logger.info(
                 meters.delimiter.join(
                     [
@@ -97,14 +98,14 @@ def do_train(
                         "iter: {iter}",
                         "{meters}",
                         "lr: {lr:.6f}",
-                        "max mem: {memory:.0f}",
+                        # "max mem: {memory:.0f}",
                     ]
                 ).format(
                     eta=eta_string,
                     iter=iteration,
                     meters=str(meters),
                     lr=optimizer.param_groups[0]["lr"],
-                    memory=torch.cuda.max_memory_allocated() / 1024.0 / 1024.0,
+                    # memory=torch.cuda.max_memory_allocated() / 1024.0 / 1024.0,
                 )
             )
         if iteration % checkpoint_period == 0:

@@ -124,8 +124,6 @@ class RPNLossComputation(object):
             size_average=False,
         ) / (sampled_inds.numel())
 
-        import pdb
-        pdb.set_trace()
         objectness_loss = F.binary_cross_entropy_with_logits(
             objectness[sampled_inds], labels[sampled_inds]
         )
