@@ -13,7 +13,6 @@ at::Tensor nms_cpu_kernel(const at::Tensor& dets,
   if (dets.numel() == 0) {
     return at::empty({0}, dets.options().dtype(at::kLong).device(at::kCPU));
   }
-  std::cout << "hey" << std::endl;
 
   auto x1_t = dets.select(1, 0).contiguous();
   auto y1_t = dets.select(1, 1).contiguous();

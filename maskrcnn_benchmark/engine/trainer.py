@@ -56,6 +56,8 @@ def do_train(
     model.train()
     start_training_time = time.time()
     end = time.time()
+    # saved_images = None
+    # saved_targets = None
     for iteration, (images, targets, _) in enumerate(data_loader, start_iter):
         data_time = time.time() - end
         iteration = iteration + 1
@@ -65,9 +67,18 @@ def do_train(
 
         images = images.to(device)
         targets = [target.to(device) for target in targets]
+        #if saved_images is None:
+        #    saved_images = images
+        #    saved_targets = targets
+        #else:
+        #    images = saved_images
+        #    targets = saved_targets
+        # FIXME: here we use fixed input for every step
+        images = torch.load('images.pt').to(device)
+        targets = [torch.load('targets.pt').to(device)]
 
+        pdb.set_trace()
         loss_dict = model(images, targets)
-        # pdb.set_trace()
 
         losses = sum(loss for loss in loss_dict.values())
         # print(torch_xla._XLAC._xla_metrics_report())
@@ -81,7 +92,7 @@ def do_train(
         losses.backward()
         # optimizer.step()
         xm.optimizer_step(optimizer)
-        pdb.set_trace()
+        # pdb.set_trace()
         print(torch_xla._XLAC._xla_metrics_report())
         batch_time = time.time() - end
         end = time.time()
