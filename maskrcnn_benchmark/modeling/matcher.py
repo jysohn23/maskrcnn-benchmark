@@ -72,8 +72,10 @@ class Matcher(object):
         between_thresholds = (matched_vals >= self.low_threshold) & (
             matched_vals < self.high_threshold
         )
+        matches = matches.cpu()
         matches[below_low_threshold] = Matcher.BELOW_LOW_THRESHOLD
         matches[between_thresholds] = Matcher.BETWEEN_THRESHOLDS
+        matches = matches.to(device='xla')
 
         if self.allow_low_quality_matches:
             self.set_low_quality_matches_(matches, all_matches, match_quality_matrix)

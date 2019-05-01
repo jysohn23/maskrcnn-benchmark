@@ -63,7 +63,7 @@ class MaskRCNNLossComputation(object):
         # NB: need to clamp the indices because we can have a single
         # GT in the image, and matched_idxs can be -2, which goes
         # out of bounds
-        matched_targets = target[matched_idxs.clamp(min=0)]
+        matched_targets = target[matched_idxs.clamp(min=0).cpu()]
         matched_targets.add_field("matched_idxs", matched_idxs)
         return matched_targets
 
@@ -81,16 +81,19 @@ class MaskRCNNLossComputation(object):
 
             # this can probably be removed, but is left here for clarity
             # and completeness
+            '''
             neg_inds = matched_idxs == Matcher.BELOW_LOW_THRESHOLD
             labels_per_image[neg_inds] = 0
+            '''
 
             # mask scores are only computed on positive samples
-            positive_inds = torch.nonzero(labels_per_image > 0).squeeze(1)
+            # positive_inds = torch.nonzero(labels_per_image > 0).squeeze(1)
 
             segmentation_masks = matched_targets.get_field("masks")
-            segmentation_masks = segmentation_masks[positive_inds]
+            # segmentation_masks = segmentation_masks[positive_inds]
 
-            positive_proposals = proposals_per_image[positive_inds]
+            positive_proposals = proposals_per_image
+            # positive_proposals = proposals_per_image[positive_inds]
 
             masks_per_image = project_masks_on_boxes(
                 segmentation_masks, positive_proposals, self.discretization_size
@@ -116,8 +119,9 @@ class MaskRCNNLossComputation(object):
         labels = cat(labels, dim=0)
         mask_targets = cat(mask_targets, dim=0)
 
-        positive_inds = torch.nonzero(labels > 0).squeeze(1)
-        labels_pos = labels[positive_inds]
+        # positive_inds = torch.nonzero(labels > 0).squeeze(1)
+        # labels_pos = labels[positive_inds]
+        labels_pos = labels
 
         # torch.mean (in binary_cross_entropy_with_logits) doesn't
         # accept empty tensors, so handle it separately
@@ -125,7 +129,7 @@ class MaskRCNNLossComputation(object):
             return mask_logits.sum() * 0
 
         mask_loss = F.binary_cross_entropy_with_logits(
-            mask_logits[positive_inds, labels_pos], mask_targets
+            mask_logits[labels.abs(), labels_pos], mask_targets
         )
         return mask_loss
 

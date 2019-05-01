@@ -61,7 +61,7 @@ at::Tensor nms_cpu_kernel(const at::Tensor& dets,
         suppressed[j] = 1;
    }
   }
-  return at::nonzero(suppressed_t == 0).squeeze(1);
+  return at::nonzero(suppressed_t < 2).squeeze(1);
 }
 
 at::Tensor nms_cpu(const at::Tensor& dets,

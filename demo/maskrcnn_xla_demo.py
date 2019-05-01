@@ -48,6 +48,8 @@ def imshow(img):
 
 
 def imsave(img):
+    import pdb
+    pdb.set_trace()
     plt.imsave('predicted.png', img[:, :, [2, 1, 0]])
 
 
@@ -75,6 +77,6 @@ coco_demo = COCODemo(
 # shape = image.shape
 # image = image[0:shape[0]//20, 0:shape[1]//20, :]
 predictions = coco_demo.run_on_opencv_image(image)
-print(torch_xla._XLAC._xla_metrics_report())
+# print(torch_xla._XLAC._xla_metrics_report())
 
 imsave(predictions)
