@@ -70,36 +70,25 @@ class MaskRCNNLossComputation(object):
     def prepare_targets(self, proposals, targets):
         labels = []
         masks = []
+        matched_idxs = []
         for proposals_per_image, targets_per_image in zip(proposals, targets):
             matched_targets = self.match_targets_to_proposals(
                 proposals_per_image, targets_per_image
             )
-            matched_idxs = matched_targets.get_field("matched_idxs")
 
             labels_per_image = matched_targets.get_field("labels")
             labels_per_image = labels_per_image.to(dtype=torch.int64)
 
-            # this can probably be removed, but is left here for clarity
-            # and completeness
-            neg_inds = matched_idxs == Matcher.BELOW_LOW_THRESHOLD
-            labels_per_image[neg_inds] = 0
-
-            # mask scores are only computed on positive samples
-            positive_inds = torch.nonzero(labels_per_image > 0).squeeze(1)
-
             segmentation_masks = matched_targets.get_field("masks")
-            segmentation_masks = segmentation_masks[positive_inds]
-
-            positive_proposals = proposals_per_image[positive_inds]
-
             masks_per_image = project_masks_on_boxes(
-                segmentation_masks, positive_proposals, self.discretization_size
+                segmentation_masks, proposals_per_image, self.discretization_size
             )
 
             labels.append(labels_per_image)
             masks.append(masks_per_image)
+            matched_idxs.append(matched_targets.get_field("matched_idxs"))
 
-        return labels, masks
+        return labels, masks, matched_idxs
 
     def __call__(self, proposals, mask_logits, targets):
         """
@@ -111,23 +100,25 @@ class MaskRCNNLossComputation(object):
         Return:
             mask_loss (Tensor): scalar tensor containing the loss
         """
-        labels, mask_targets = self.prepare_targets(proposals, targets)
+        labels, mask_targets, matched_idxs = self.prepare_targets(proposals, targets)
 
         labels = cat(labels, dim=0)
         mask_targets = cat(mask_targets, dim=0)
-
-        positive_inds = torch.nonzero(labels > 0).squeeze(1)
-        labels_pos = labels[positive_inds]
+        matched_idxs = cat(matched_idxs, dim=0)
 
         # torch.mean (in binary_cross_entropy_with_logits) doesn't
         # accept empty tensors, so handle it separately
         if mask_targets.numel() == 0:
             return mask_logits.sum() * 0
 
+        assert labels.dim() == 1
+        inds = torch.arange(labels.size(0))
         mask_loss = F.binary_cross_entropy_with_logits(
-            mask_logits[positive_inds, labels_pos], mask_targets
+            mask_logits[inds, labels], mask_targets, reduction='none'
         )
-        return mask_loss
+        mask_loss_fact = (matched_idxs != Matcher.BELOW_LOW_THRESHOLD).to(dtype=torch.float32).unsqueeze(1).unsqueeze(1)
+        mask_loss_fact = mask_loss_fact.expand_as(mask_loss)
+        return (mask_loss * mask_loss_fact).sum() / mask_loss_fact.sum()
 
 
 def make_roi_mask_loss_evaluator(cfg):
