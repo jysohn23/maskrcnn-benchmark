@@ -2,7 +2,7 @@
 import torch
 from torch.nn import functional as F
 
-from maskrcnn_benchmark.layers import smooth_l1_loss
+from maskrcnn_benchmark.layers import smooth_l1_loss, smooth_l1_loss_no_reduction
 from maskrcnn_benchmark.modeling.box_coder import BoxCoder
 from maskrcnn_benchmark.modeling.matcher import Matcher
 from maskrcnn_benchmark.structures.boxlist_ops import boxlist_iou
@@ -63,11 +63,13 @@ class FastRCNNLossComputation(object):
 
             # Label background (below the low threshold)
             bg_inds = matched_idxs == Matcher.BELOW_LOW_THRESHOLD
-            labels_per_image[bg_inds] = 0
+            bg_val = torch.full_like(labels_per_image, 0)
+            labels_per_image = torch.where(bg_inds, bg_val, labels_per_image)
 
             # Label ignore proposals (between low and high thresholds)
             ignore_inds = matched_idxs == Matcher.BETWEEN_THRESHOLDS
-            labels_per_image[ignore_inds] = -1  # -1 is ignored by sampler
+            ignore_val = torch.full_like(labels_per_image, -1)  # -1 is ignored by sampler
+            labels_per_image = torch.where(ignore_inds, ignore_val, labels_per_image)
 
             # compute regression targets
             regression_targets_per_image = self.box_coder.encode(
@@ -91,7 +93,7 @@ class FastRCNNLossComputation(object):
         """
 
         labels, regression_targets = self.prepare_targets(proposals, targets)
-        sampled_pos_inds, sampled_neg_inds = self.fg_bg_sampler(labels)
+        sampled_pos_inds, sampled_neg_inds = self.fg_bg_sampler([l.cpu() for l in labels])
 
         proposals = list(proposals)
         # add corresponding label and regression_targets information to the bounding boxes
@@ -145,23 +147,20 @@ class FastRCNNLossComputation(object):
 
         classification_loss = F.cross_entropy(class_logits, labels)
 
-        # get indices that correspond to the regression targets for
-        # the corresponding ground truth labels, to be used with
-        # advanced indexing
-        sampled_pos_inds_subset = torch.nonzero(labels > 0).squeeze(1)
-        labels_pos = labels[sampled_pos_inds_subset]
+        assert labels.dim() == 1
+        sampled_pos_inds_subset = torch.arange(labels.size(0))
         if self.cls_agnostic_bbox_reg:
             map_inds = torch.tensor([4, 5, 6, 7], device=device)
         else:
-            map_inds = 4 * labels_pos[:, None] + torch.tensor(
+            map_inds = 4 * labels[:, None] + torch.tensor(
                 [0, 1, 2, 3], device=device)
-
-        box_loss = smooth_l1_loss(
+        box_loss_elements = smooth_l1_loss_no_reduction(
             box_regression[sampled_pos_inds_subset[:, None], map_inds],
             regression_targets[sampled_pos_inds_subset],
             size_average=False,
             beta=1,
         )
+        box_loss = (box_loss_elements * (labels > 0).unsqueeze(1)).sum()
         box_loss = box_loss / labels.numel()
 
         return classification_loss, box_loss
