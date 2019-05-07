@@ -26,7 +26,7 @@ def boxlist_nms(boxlist, nms_thresh, max_proposals=-1, score_field="scores"):
     boxes = boxlist.bbox
     score = boxlist.get_field(score_field)
     device = boxes.device
-    torch_xla._XLAC._xla_sync_multi([boxes, score])
+    torch_xla._XLAC._xla_sync_multi([boxes, score], devices=[])
     boxes_cpu = boxes.cpu().clone()
     score_cpu = score.cpu().clone()
     keep = _box_nms(boxes_cpu, score_cpu, nms_thresh)
