@@ -63,7 +63,8 @@ class MaskRCNNLossComputation(object):
         # NB: need to clamp the indices because we can have a single
         # GT in the image, and matched_idxs can be -2, which goes
         # out of bounds
-        matched_targets = target[matched_idxs.clamp(min=0)]
+        # TODO: rework this to not need CPU transfer
+        matched_targets = target[matched_idxs.clamp(min=0).cpu()]
         matched_targets.add_field("matched_idxs", matched_idxs)
         return matched_targets
 
