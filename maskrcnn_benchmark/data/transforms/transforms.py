@@ -4,6 +4,7 @@ import random
 import torch
 import torchvision
 from torchvision.transforms import functional as F
+from PIL import Image
 
 
 class Compose(object):
@@ -28,37 +29,47 @@ class Resize(object):
     def __init__(self, min_size, max_size):
         if not isinstance(min_size, (list, tuple)):
             min_size = (min_size,)
-        self.min_size = min_size
-        self.max_size = max_size
+        self.min_size = 1024
+        self.max_size = 1024
 
     # modified from torchvision to add support for max size
     def get_size(self, image_size):
         w, h = image_size
-        size = random.choice(self.min_size)
-        max_size = self.max_size
-        if max_size is not None:
-            min_original_size = float(min((w, h)))
-            max_original_size = float(max((w, h)))
-            if max_original_size / min_original_size * size > max_size:
-                size = int(round(max_size * min_original_size / max_original_size))
+        desired_width = self.min_size
+        desired_height = self.max_size
+        #if max_size is not None:
+        #    min_original_size = float(min((w, h)))
+        #    max_original_size = float(max((w, h)))
+        #    if max_original_size / min_original_size * size > max_size:
+        #        size = int(round(max_size * min_original_size / max_original_size))
 
-        if (w <= h and w == size) or (h <= w and h == size):
-            return (h, w)
+        #if (w <= h and w == size) or (h <= w and h == size):
+        #    return (h, w)
+        width_scale = desired_width / w
+        height_scale = desired_height / h
+        scale = min(width_scale, height_scale)
+        scaled_width = int(scale * w)
+        scaled_height = int(scale * h)
 
-        if w < h:
-            ow = size
-            oh = int(size * h / w)
-        else:
-            oh = size
-            ow = int(size * w / h)
 
-        return (oh, ow)
+        #if w < h:
+        #    ow = size
+        #    oh = int(size * h / w)
+        #else:
+        #    oh = size
+        #    ow = int(size * w / h)
+
+        return (scaled_width, scaled_height)
 
     def __call__(self, image, target):
         size = self.get_size(image.size)
         image = F.resize(image, size)
         target = target.resize(image.size)
-        return image, target
+        im = Image.new("RGB", (self.min_size, self.max_size))
+        # Pad to (1024, 1024), num_boxes = 100
+        im.paste(image)
+        target.pad((self.min_size, self.max_size), 100)
+        return im, target
 
 
 class RandomHorizontalFlip(object):

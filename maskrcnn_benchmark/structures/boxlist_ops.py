@@ -93,6 +93,11 @@ def boxlist_iou(boxlist1, boxlist2):
     inter = wh[:, :, 0] * wh[:, :, 1]  # [N,M]
 
     iou = inter / (area1[:, None] + area2 - inter)
+    # Usually box1 is target with num_gt not None
+    if boxlist1.num_gt is not None:
+        iou[boxlist1.num_gt:] = -1
+    if boxlist2.num_gt is not None:
+        iou[:, boxlist2.num_gt:] = -1
     return iou
 
 
