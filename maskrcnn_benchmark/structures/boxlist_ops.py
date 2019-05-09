@@ -30,11 +30,11 @@ def boxlist_nms(boxlist, nms_thresh, max_proposals=-1, score_field="scores"):
     boxes_cpu = boxes.cpu().clone()
     score_cpu = score.cpu().clone()
     keep = _box_nms(boxes_cpu, score_cpu, nms_thresh)
-    keep = keep.to(device=device)
 
     # keep = _box_nms(boxes, score, nms_thresh)
     if max_proposals > 0:
         keep = keep[: max_proposals]
+    keep = keep.to(device=device)
     boxlist = boxlist[keep]
     return boxlist.convert(mode)
 
