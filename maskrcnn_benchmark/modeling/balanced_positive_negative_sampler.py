@@ -35,6 +35,8 @@ class BalancedPositiveNegativeSampler(object):
         pos_idx = []
         neg_idx = []
         for matched_idxs_per_image in matched_idxs:
+            device = matched_idxs_per_image.device
+            matched_idxs_per_image = matched_idxs_per_image.cpu()
             assert matched_idxs_per_image.dim() == 1
             num_pos = int(self.batch_size_per_image * self.positive_fraction)
             num_pos = min((matched_idxs_per_image > 0).sum(), num_pos)
@@ -62,7 +64,7 @@ class BalancedPositiveNegativeSampler(object):
             pos_idx_per_image_mask = pos_idx_per_image_mask & (matched_idxs_per_image > 0)
             neg_idx_per_image_mask = neg_idx_per_image_mask & (matched_idxs_per_image == 0)
 
-            pos_idx.append(pos_idx_per_image_mask)
-            neg_idx.append(neg_idx_per_image_mask)
+            pos_idx.append(pos_idx_per_image_mask.to(device=device))
+            neg_idx.append(neg_idx_per_image_mask.to(device=device))
 
         return pos_idx, neg_idx
