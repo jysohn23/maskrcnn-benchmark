@@ -37,27 +37,11 @@ class Resize(object):
         w, h = image_size
         desired_width = self.min_size
         desired_height = self.max_size
-        #if max_size is not None:
-        #    min_original_size = float(min((w, h)))
-        #    max_original_size = float(max((w, h)))
-        #    if max_original_size / min_original_size * size > max_size:
-        #        size = int(round(max_size * min_original_size / max_original_size))
-
-        #if (w <= h and w == size) or (h <= w and h == size):
-        #    return (h, w)
         width_scale = desired_width / w
         height_scale = desired_height / h
         scale = min(width_scale, height_scale)
         scaled_width = int(scale * w)
         scaled_height = int(scale * h)
-
-
-        #if w < h:
-        #    ow = size
-        #    oh = int(size * h / w)
-        #else:
-        #    oh = size
-        #    ow = int(size * w / h)
 
         return (scaled_width, scaled_height)
 

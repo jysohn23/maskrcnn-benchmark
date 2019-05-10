@@ -103,8 +103,6 @@ class MaskRCNNLossComputation(object):
         """
         labels, mask_targets, matched_idxs = self.prepare_targets(proposals, targets)
 
-        import pdb
-        pdb.set_trace()
         labels = cat(labels, dim=0)
         mask_targets = cat(mask_targets, dim=0)
         matched_idxs = cat(matched_idxs, dim=0)
@@ -121,8 +119,7 @@ class MaskRCNNLossComputation(object):
         )
         mask_loss_fact = (matched_idxs != Matcher.BELOW_LOW_THRESHOLD).to(dtype=torch.float32).unsqueeze(1).unsqueeze(1)
         mask_loss_fact = mask_loss_fact.expand_as(mask_loss)
-        # return (mask_loss * mask_loss_fact).sum() / mask_loss_fact.sum()
-        return (mask_loss * mask_loss_fact).sum().sum().sum() / mask_loss_fact.sum().sum().sum()
+        return (mask_loss * mask_loss_fact).sum() / mask_loss_fact.sum()
 
 
 def make_roi_mask_loss_evaluator(cfg):

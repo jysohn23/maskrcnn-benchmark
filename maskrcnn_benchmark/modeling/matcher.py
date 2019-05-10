@@ -99,9 +99,7 @@ class Matcher(object):
                                                  padding)
 
         # Find highest quality match available, even if it is low, including ties
-        gt_pred_pairs_of_highest_quality = torch.nonzero(
-                match_quality_matrix == highest_quality_foreach_gt[:, None]
-        )
+        gt_pred_pairs_of_highest_quality = (match_quality_matrix == highest_quality_foreach_gt[:, None]).sum(dim=0) > 0
         # Example gt_pred_pairs_of_highest_quality:
         #   tensor([[    0, 39796],
         #           [    1, 32055],
@@ -116,5 +114,6 @@ class Matcher(object):
         # Each row is a (gt index, prediction index)
         # Note how gt items 1, 2, 3, and 5 each have two ties
 
-        pred_inds_to_update = gt_pred_pairs_of_highest_quality[:, 1]
-        matches[pred_inds_to_update] = all_matches[pred_inds_to_update]
+        # pred_inds_to_update = gt_pred_pairs_of_highest_quality[:, 1]
+        # matches[pred_inds_to_update] = all_matches[pred_inds_to_update]
+        matches = torch.where(gt_pred_pairs_of_highest_quality, all_matches, matches)

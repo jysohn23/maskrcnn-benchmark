@@ -93,11 +93,13 @@ def boxlist_iou(boxlist1, boxlist2):
     inter = wh[:, :, 0] * wh[:, :, 1]  # [N,M]
 
     iou = inter / (area1[:, None] + area2 - inter)
-    # Usually box1 is target with num_gt not None
-    if boxlist1.num_gt is not None:
-        iou[boxlist1.num_gt:] = -1
-    if boxlist2.num_gt is not None:
-        iou[:, boxlist2.num_gt:] = -1
+    # Usually box1 is target with gt_real not None
+    if boxlist1.gt_real is not None:
+        iou = torch.where(boxlist1.gt_real.unsqueeze(1).expand_as(iou) > 0, iou, torch.full_like(iou, -1))
+        # iou[boxlist1.num_gt:] = -1
+    if boxlist2.gt_real is not None:
+        iou = torch.where(boxlist2.gt_real.unsqueeze(0).expand_as(iou) > 0, iou, torch.full_like(iou, -1))
+        # iou[:, boxlist2.gt_real:] = -1
     return iou
 
 

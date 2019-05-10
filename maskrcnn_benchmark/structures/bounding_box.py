@@ -16,7 +16,7 @@ class BoxList(object):
     labels.
     """
 
-    def __init__(self, bbox, image_size, mode="xyxy", num_gt=None):
+    def __init__(self, bbox, image_size, mode="xyxy", gt_real=None):
         device = bbox.device if isinstance(bbox, torch.Tensor) else torch.device("cpu")
         bbox = torch.as_tensor(bbox, dtype=torch.float32, device=device)
         if bbox.ndimension() != 2:
@@ -34,7 +34,7 @@ class BoxList(object):
         self.bbox = bbox
         self.size = image_size  # (image_width, image_height)
         self.mode = mode
-        self.num_gt = num_gt
+        self.gt_real = gt_real
         self.extra_fields = {}
 
     def add_field(self, field, field_data):
@@ -63,13 +63,13 @@ class BoxList(object):
         xmin, ymin, xmax, ymax = self._split_into_xyxy()
         if mode == "xyxy":
             bbox = torch.cat((xmin, ymin, xmax, ymax), dim=-1)
-            bbox = BoxList(bbox, self.size, mode, self.num_gt)
+            bbox = BoxList(bbox, self.size, mode, self.gt_real)
         else:
             TO_REMOVE = 1
             bbox = torch.cat(
                 (xmin, ymin, xmax - xmin + TO_REMOVE, ymax - ymin + TO_REMOVE), dim=-1
             )
-            bbox = BoxList(bbox, self.size, mode, self.num_gt)
+            bbox = BoxList(bbox, self.size, mode, self.gt_real)
         bbox._copy_extra_fields(self)
         return bbox
 
@@ -101,7 +101,7 @@ class BoxList(object):
         if ratios[0] == ratios[1]:
             ratio = ratios[0]
             scaled_box = self.bbox * ratio
-            bbox = BoxList(scaled_box, size, self.mode, self.num_gt)
+            bbox = BoxList(scaled_box, size, self.mode, self.gt_real)
             # bbox._copy_extra_fields(self)
             for k, v in self.extra_fields.items():
                 if not isinstance(v, torch.Tensor):
@@ -118,7 +118,7 @@ class BoxList(object):
         scaled_box = torch.cat(
             (scaled_xmin, scaled_ymin, scaled_xmax, scaled_ymax), dim=-1
         )
-        bbox = BoxList(scaled_box, size, mode="xyxy", num_gt=self.num_gt)
+        bbox = BoxList(scaled_box, size, mode="xyxy", gt_real=self.gt_real)
         # bbox._copy_extra_fields(self)
         for k, v in self.extra_fields.items():
             if not isinstance(v, torch.Tensor):
@@ -132,11 +132,16 @@ class BoxList(object):
         Here we simply assume self.size is smaller than size
         Boxlist doesn't change except for size
         Labels and SegmentationMask need to be padded if exists
+        Note that we don't pad Polygons in SegmentationMask as
+        currently Pytorch implementation already push it back to
+        CPUs for perf reason. Padding those use a lot of memory,
+        we can add later if it helps perf.
         """
         self.size = size
         paded_bbox = torch.zeros(num_boxes, 4)
         paded_bbox[:len(self)] = self.bbox
-        self.num_gt = len(self)
+        self.gt_real = torch.zeros(num_boxes)
+        self.gt_real[:len(self)] = 1
         self.bbox = paded_bbox
 
         if 'labels' in self.fields():
@@ -146,7 +151,7 @@ class BoxList(object):
             self.add_field('labels', padded_labels)
 
         if 'masks' in self.fields():
-            self.get_field('masks').pad(size, num_boxes, self.num_gt)
+            self.get_field('masks').pad(size, num_boxes, self.gt_real.sum())
 
     def transpose(self, method):
         """
@@ -178,7 +183,7 @@ class BoxList(object):
         transposed_boxes = torch.cat(
             (transposed_xmin, transposed_ymin, transposed_xmax, transposed_ymax), dim=-1
         )
-        bbox = BoxList(transposed_boxes, self.size, mode="xyxy", num_gt=self.num_gt)
+        bbox = BoxList(transposed_boxes, self.size, mode="xyxy", gt_real=self.gt_real)
         # bbox._copy_extra_fields(self)
         for k, v in self.extra_fields.items():
             if not isinstance(v, torch.Tensor):
@@ -206,7 +211,7 @@ class BoxList(object):
         cropped_box = torch.cat(
             (cropped_xmin, cropped_ymin, cropped_xmax, cropped_ymax), dim=-1
         )
-        bbox = BoxList(cropped_box, (w, h), mode="xyxy", num_gt=self.num_gt)
+        bbox = BoxList(cropped_box, (w, h), mode="xyxy", gt_real=self.gt_real)
         # bbox._copy_extra_fields(self)
         for k, v in self.extra_fields.items():
             if not isinstance(v, torch.Tensor):
@@ -217,7 +222,7 @@ class BoxList(object):
     # Tensor-like methods
 
     def to(self, device):
-        bbox = BoxList(self.bbox.to(device), self.size, self.mode, self.num_gt)
+        bbox = BoxList(self.bbox.to(device), self.size, self.mode, self.gt_real.to(device) if self.gt_real is not None else None)
         for k, v in self.extra_fields.items():
             if hasattr(v, "to"):
                 v = v.to(device)
@@ -225,7 +230,7 @@ class BoxList(object):
         return bbox
 
     def __getitem__(self, item):
-        bbox = BoxList(self.bbox[item], self.size, self.mode, self.num_gt)
+        bbox = BoxList(self.bbox[item], self.size, self.mode, self.gt_real)
         for k, v in self.extra_fields.items():
             bbox.add_field(k, v[item])
         return bbox
@@ -258,7 +263,7 @@ class BoxList(object):
         return area
 
     def copy_with_fields(self, fields, skip_missing=False):
-        bbox = BoxList(self.bbox, self.size, self.mode, self.num_gt)
+        bbox = BoxList(self.bbox, self.size, self.mode, self.gt_real)
         if not isinstance(fields, (list, tuple)):
             fields = [fields]
         for field in fields:
@@ -274,7 +279,7 @@ class BoxList(object):
         s += "image_width={}, ".format(self.size[0])
         s += "image_height={}, ".format(self.size[1])
         s += "mode={}, ".format(self.mode)
-        s += "num_gt={})".format(self.num_gt)
+        s += "num_gt={})".format(self.gt_real.sum())
         return s
 
 
