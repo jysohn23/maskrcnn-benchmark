@@ -125,8 +125,10 @@ class RPNLossComputation(object):
         ) / (sampled_inds.numel())
 
         objectness_loss = F.binary_cross_entropy_with_logits(
-            objectness[sampled_inds], labels[sampled_inds]
+            objectness, labels, reduction='none'
         )
+        objectness_loss = torch.where(sampled_inds, objectness_loss, torch.zeros_like(objectness_loss))
+        objectness_loss = objectness_loss.sum() / sampled_inds.sum()
 
         return objectness_loss, box_loss
 
