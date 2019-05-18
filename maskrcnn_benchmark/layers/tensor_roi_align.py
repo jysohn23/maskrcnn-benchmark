@@ -5,13 +5,17 @@ import torch.nn.functional as F
 def bilinear_interpolate(bottom_data, height, width, y, x):
   y_low = torch.where(y.long() >= height - 1, torch.full_like(y, height - 1),
                       y.long().float()).long()
+  y_low = y_low.clamp(0, height - 1)
   x_low = torch.where(x.long() >= width - 1, torch.full_like(x, width - 1),
                       x.long().float()).long()
+  x_low = x_low.clamp(0, width - 1)
 
   y_high = torch.where(y.long() >= height - 1, torch.full_like(y_low, height - 1),
                        y_low + 1)
+  y_high = y_high.clamp(0, height - 1)
   x_high = torch.where(x.long() >= width - 1, torch.full_like(x_low, width - 1),
                        x_low + 1)
+  x_high = x_high.clamp(0, width - 1)
 
   y = torch.where(y.long() >= height - 1, y_low.float(), y)
   x = torch.where(x.long() >= width - 1, x_low.float(), x)
@@ -32,6 +36,10 @@ def bilinear_interpolate(bottom_data, height, width, y, x):
   w4 = ly * lx
 
   val = w1 * v1 + w2 * v2 + w3 * v3 + w4 * v4
+  val = torch.where(y < -1, torch.zeros_like(val), val)
+  val = torch.where(y > height, torch.zeros_like(val), val)
+  val = torch.where(x < -1, torch.zeros_like(val), val)
+  val = torch.where(x > height, torch.zeros_like(val), val)
 
   return val
 
