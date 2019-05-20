@@ -1,6 +1,7 @@
 from maskrcnn_benchmark.layers import ROIAlign, tensor_roi_align
 import random
 import torch
+import torch_xla
 import unittest
 
 
@@ -34,10 +35,12 @@ class TestROIAlign(unittest.TestCase):
     roi_align = ROIAlign(
         output_size, spatial_scale=spatial_scale, sampling_ratio=sampling_ratio)
     aligned_ref = roi_align(bottom_image_data, rois)
-    aligned = tensor_roi_align(bottom_image_data, spatial_scale, channels,
-                               height, width, output_size[0], output_size[1],
-                               sampling_ratio, rois)
-    self.assertAlmostEqual((aligned - aligned_ref).abs().max().item(), 0, places=5)
+    rois = rois.to(device='xla')
+    bottom_image_data = bottom_image_data.to(device='xla')
+    aligned = tensor_roi_align(bottom_image_data, rois, output_size,
+                               spatial_scale, sampling_ratio)
+    self.assertAlmostEqual(
+        (aligned - aligned_ref).abs().max().item(), 0, places=5)
 
 
 if __name__ == '__main__':
