@@ -56,8 +56,8 @@ def tensor_roi_align(bottom_data, spatial_scale, channels, height, width,
     roi_end_w = roi_sizes[2]
     roi_end_h = roi_sizes[3]
 
-    roi_width = torch.max(roi_end_w - roi_start_w, torch.scalar_tensor(1))
-    roi_height = torch.max(roi_end_h - roi_start_h, torch.scalar_tensor(1))
+    roi_width = torch.max(roi_end_w - roi_start_w, torch.ones_like(roi_end_w))
+    roi_height = torch.max(roi_end_h - roi_start_h, torch.ones_like(roi_end_h))
     bin_size_h = roi_height / pooled_height
     bin_size_w = roi_width / pooled_width
 
@@ -75,5 +75,8 @@ def tensor_roi_align(bottom_data, spatial_scale, channels, height, width,
     x = roi_start_w + pw.float(
     ) * bin_size_w + x_neigh_offsets * bin_size_w / sampling_ratio
     interpolated = bilinear_interpolate(bottom_data_channel, height, width, y, x)
-    result.append(F.avg_pool2d(interpolated, sampling_ratio))
+    interpolated = interpolated.unsqueeze(0)
+    pooled = F.avg_pool2d(interpolated, sampling_ratio)
+    pooled = pooled.squeeze(0)
+    result.append(pooled)
   return torch.stack(result, dim=0)
