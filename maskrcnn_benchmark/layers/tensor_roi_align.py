@@ -2,14 +2,24 @@ import torch
 import torch.nn.functional as F
 
 
-def _bottom_data_slice(bottom_data, y, x):
-  y = y.unsqueeze(1).unsqueeze(3)
-  y = y.expand(
-      bottom_data.size(0), bottom_data.size(1), y.size(2), bottom_data.size(3))
-  gathered = torch.gather(bottom_data, 2, y)
-  x = x.unsqueeze(1).unsqueeze(2)
-  x = x.expand(gathered.size(0), gathered.size(1), gathered.size(2), x.size(3))
-  return torch.gather(gathered, 3, x)
+def _bottom_data_slice(bottom_data, y, x, height, width):
+  batch = bottom_data.size(0)
+  num_filters = bottom_data.size(1)
+  bottom_data = bottom_data.permute([0, 2, 3, 1])
+  bottom_data = bottom_data.view([-1, num_filters])
+  output_height = y.size(1)
+  output_width = x.size(1)
+  y = y.unsqueeze(2)
+  x = x.unsqueeze(1)
+  batch_off = torch.arange(batch) * height * width
+  batch_off = batch_off.unsqueeze(1).unsqueeze(2)
+  linear_indices = (y * width + x + batch_off).view([-1])
+  linear_indices = linear_indices.unsqueeze(1)
+  linear_indices = linear_indices.expand([linear_indices.size(0), num_filters])
+  gathered = torch.gather(bottom_data, 0, linear_indices)
+  gathered = gathered.view([batch, output_height, output_width, num_filters])
+  gathered = gathered.permute([0, 3, 1, 2])
+  return gathered
 
 
 def _bilinear_interpolate(bottom_data, height, width, y, x):
@@ -35,10 +45,10 @@ def _bilinear_interpolate(bottom_data, height, width, y, x):
   hy = 1. - ly
   hx = 1. - lx
 
-  v1 = _bottom_data_slice(bottom_data, y_low, x_low)
-  v2 = _bottom_data_slice(bottom_data, y_low, x_high)
-  v3 = _bottom_data_slice(bottom_data, y_high, x_low)
-  v4 = _bottom_data_slice(bottom_data, y_high, x_high)
+  v1 = _bottom_data_slice(bottom_data, y_low, x_low, height, width)
+  v2 = _bottom_data_slice(bottom_data, y_low, x_high, height, width)
+  v3 = _bottom_data_slice(bottom_data, y_high, x_low, height, width)
+  v4 = _bottom_data_slice(bottom_data, y_high, x_high, height, width)
 
   w1 = (hy * hx).unsqueeze(1)
   w2 = (hy * lx).unsqueeze(1)
