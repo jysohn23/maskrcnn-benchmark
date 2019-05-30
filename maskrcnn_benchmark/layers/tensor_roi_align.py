@@ -14,9 +14,7 @@ def _bottom_data_slice(bottom_data, y, x, height, width):
   batch_off = torch.arange(batch) * height * width
   batch_off = batch_off.unsqueeze(1).unsqueeze(2)
   linear_indices = (y * width + x + batch_off).view([-1])
-  linear_indices = linear_indices.unsqueeze(1)
-  linear_indices = linear_indices.expand([linear_indices.size(0), num_filters])
-  gathered = torch.gather(bottom_data, 0, linear_indices)
+  gathered = torch.index_select(bottom_data, 0, linear_indices)
   gathered = gathered.view([batch, output_height, output_width, num_filters])
   gathered = gathered.permute([0, 3, 1, 2])
   return gathered
