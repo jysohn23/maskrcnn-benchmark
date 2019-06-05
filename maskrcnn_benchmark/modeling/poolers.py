@@ -100,11 +100,7 @@ class Pooler(nn.Module):
         num_levels = len(self.poolers)
         rois = self.convert_to_roi_format(boxes)
         if num_levels == 1:
-            torch_xla._XLAC._xla_sync_multi([x[0], rois], devices=[])
-            x0_cpu = x[0].cpu().clone()
-            rois_cpu = rois.cpu().clone()
-            xla_device = rois.device
-            return self.poolers[0](x0_cpu, rois_cpu).to(xla_device)
+            return self.poolers[0](x[0], rois)
 
         levels = self.map_levels(boxes)
 
