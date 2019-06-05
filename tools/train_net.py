@@ -31,6 +31,7 @@ import torch_xla_py.xla_model as xm
 def train(cfg, local_rank, distributed):
     model = build_detection_model(cfg)
     device = xm.xla_device()
+    torch_xla._XLAC._xla_set_default_device(str(device))
     model.to(device)
 
     optimizer = make_optimizer(cfg, model)
