@@ -2,7 +2,6 @@
 import datetime
 import logging
 import time
-import pdb
 
 import torch
 import torch.distributed as dist
@@ -67,7 +66,6 @@ def do_train(
         targets = [target.to(device) for target in targets]
 
         loss_dict = model(images, targets)
-        # pdb.set_trace()
 
         losses = sum(loss for loss in loss_dict.values())
         # print(torch_xla._XLAC._xla_metrics_report())
@@ -81,7 +79,6 @@ def do_train(
         losses.backward()
         # optimizer.step()
         xm.optimizer_step(optimizer)
-        pdb.set_trace()
         print(torch_xla._XLAC._xla_metrics_report())
         batch_time = time.time() - end
         end = time.time()
