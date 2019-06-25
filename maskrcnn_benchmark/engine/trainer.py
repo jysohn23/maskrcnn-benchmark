@@ -62,8 +62,6 @@ def do_train(
 
         scheduler.step()
 
-        import pdb
-        pdb.set_trace()
         images = images.to(device)
         targets = [target.to(device) for target in targets]
 

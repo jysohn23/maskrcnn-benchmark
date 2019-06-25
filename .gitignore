@@ -1,3 +1,6 @@
+.gitignore
+log.txt
+
 # compilation and distribution
 __pycache__
 _ext
