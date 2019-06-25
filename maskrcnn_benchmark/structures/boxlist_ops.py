@@ -5,6 +5,7 @@ from .bounding_box import BoxList
 
 from maskrcnn_benchmark.layers import nms as _box_nms
 
+import torch_xla
 
 def boxlist_nms(boxlist, nms_thresh, max_proposals=-1, score_field="scores"):
     """
@@ -24,9 +25,15 @@ def boxlist_nms(boxlist, nms_thresh, max_proposals=-1, score_field="scores"):
     boxlist = boxlist.convert("xyxy")
     boxes = boxlist.bbox
     score = boxlist.get_field(score_field)
-    keep = _box_nms(boxes, score, nms_thresh)
+    device = boxes.device
+    torch_xla._XLAC._xla_sync_multi([boxes, score], devices=[])
+    boxes_cpu = boxes.cpu().clone()
+    score_cpu = score.cpu().clone()
+    keep = _box_nms(boxes_cpu, score_cpu, nms_thresh)
+
     if max_proposals > 0:
         keep = keep[: max_proposals]
+    keep = keep.to(device=device)
     boxlist = boxlist[keep]
     return boxlist.convert(mode)
 
@@ -76,8 +83,8 @@ def boxlist_iou(boxlist1, boxlist2):
 
     box1, box2 = boxlist1.bbox, boxlist2.bbox
 
-    lt = torch.max(box1[:, None, :2], box2[:, :2])  # [N,M,2]
-    rb = torch.min(box1[:, None, 2:], box2[:, 2:])  # [N,M,2]
+    lt = torch.max(box1[:, None, :2], box2[:, :2]) # [N,M,2]
+    rb = torch.min(box1[:, None, 2:], box2[:, 2:]) # [N,M,2]
 
     TO_REMOVE = 1
 
@@ -85,6 +92,13 @@ def boxlist_iou(boxlist1, boxlist2):
     inter = wh[:, :, 0] * wh[:, :, 1]  # [N,M]
 
     iou = inter / (area1[:, None] + area2 - inter)
+    # Usually box1 is target with gt_real not None
+    if boxlist1.gt_real is not None:
+        iou = torch.where(boxlist1.gt_real.unsqueeze(1).expand_as(iou) > 0, iou, torch.full_like(iou, -1))
+        # iou[boxlist1.num_gt:] = -1
+    if boxlist2.gt_real is not None:
+        iou = torch.where(boxlist2.gt_real.unsqueeze(0).expand_as(iou) > 0, iou, torch.full_like(iou, -1))
+        # iou[:, boxlist2.gt_real:] = -1
     return iou
 
 

@@ -67,16 +67,16 @@ class RPNLossComputation(object):
 
             # Background (negative examples)
             bg_indices = matched_idxs == Matcher.BELOW_LOW_THRESHOLD
-            labels_per_image[bg_indices] = 0
+            labels_per_image = torch.where(bg_indices, torch.full_like(labels_per_image, 0), labels_per_image)
 
             # discard anchors that go out of the boundaries of the image
             if "not_visibility" in self.discard_cases:
-                labels_per_image[~anchors_per_image.get_field("visibility")] = -1
+                labels_per_image = torch.where(~anchors_per_image.get_field("visibility"), torch.full_like(labels_per_image, -1), labels_per_image)
 
             # discard indices that are between thresholds
             if "between_thresholds" in self.discard_cases:
                 inds_to_discard = matched_idxs == Matcher.BETWEEN_THRESHOLDS
-                labels_per_image[inds_to_discard] = -1
+                labels_per_image = torch.where(inds_to_discard == 1, torch.full_like(labels_per_image, -1), labels_per_image)
 
             # compute regression targets
             regression_targets_per_image = self.box_coder.encode(
@@ -99,15 +99,14 @@ class RPNLossComputation(object):
 
         Returns:
             objectness_loss (Tensor)
-            box_loss (Tensor
+            box_loss (Tensor)
         """
         anchors = [cat_boxlist(anchors_per_image) for anchors_per_image in anchors]
         labels, regression_targets = self.prepare_targets(anchors, targets)
         sampled_pos_inds, sampled_neg_inds = self.fg_bg_sampler(labels)
-        sampled_pos_inds = torch.nonzero(torch.cat(sampled_pos_inds, dim=0)).squeeze(1)
-        sampled_neg_inds = torch.nonzero(torch.cat(sampled_neg_inds, dim=0)).squeeze(1)
-
-        sampled_inds = torch.cat([sampled_pos_inds, sampled_neg_inds], dim=0)
+        sampled_pos_inds = torch.cat(sampled_pos_inds, dim=0)
+        sampled_neg_inds = torch.cat(sampled_neg_inds, dim=0)
+        sampled_inds = sampled_pos_inds | sampled_neg_inds
 
         objectness, box_regression = \
                 concat_box_prediction_layers(objectness, box_regression)
@@ -118,15 +117,17 @@ class RPNLossComputation(object):
         regression_targets = torch.cat(regression_targets, dim=0)
 
         box_loss = smooth_l1_loss(
-            box_regression[sampled_pos_inds],
-            regression_targets[sampled_pos_inds],
+            torch.where(sampled_pos_inds.unsqueeze(1).expand_as(box_regression) > 0, box_regression, torch.full_like(box_regression, 0)),
+            torch.where(sampled_pos_inds.unsqueeze(1).expand_as(regression_targets) > 0, regression_targets, torch.full_like(regression_targets, 0)),
             beta=1.0 / 9,
             size_average=False,
-        ) / (sampled_inds.numel())
+        ) / (sampled_inds.sum())
 
         objectness_loss = F.binary_cross_entropy_with_logits(
-            objectness[sampled_inds], labels[sampled_inds]
+            objectness, labels, reduction='none'
         )
+        objectness_loss = torch.where(sampled_inds, objectness_loss, torch.zeros_like(objectness_loss))
+        objectness_loss = objectness_loss.sum() / sampled_inds.sum()
 
         return objectness_loss, box_loss
 

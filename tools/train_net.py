@@ -11,6 +11,9 @@ import argparse
 import os
 
 import torch
+import torch_xla
+import torch_xla_py.utils as xu
+import torch_xla_py.xla_model as xm
 from maskrcnn_benchmark.config import cfg
 from maskrcnn_benchmark.data import make_data_loader
 from maskrcnn_benchmark.solver import make_lr_scheduler
@@ -26,9 +29,10 @@ from maskrcnn_benchmark.utils.logger import setup_logger
 from maskrcnn_benchmark.utils.miscellaneous import mkdir
 
 
-def train(cfg, local_rank, distributed):
+def train(cfg, local_rank, distributed, metrics_debug):
     model = build_detection_model(cfg)
-    device = torch.device(cfg.MODEL.DEVICE)
+    device = xm.xla_device()
+    torch_xla._XLAC._xla_set_default_device(str(device))
     model.to(device)
 
     optimizer = make_optimizer(cfg, model)
@@ -71,15 +75,16 @@ def train(cfg, local_rank, distributed):
         device,
         checkpoint_period,
         arguments,
+        metrics_debug,
     )
 
     return model
 
 
 def run_test(cfg, model, distributed):
+    device = xm.xla_device()
     if distributed:
         model = model.module
-    torch.cuda.empty_cache()  # TODO check if it helps
     iou_types = ("bbox",)
     if cfg.MODEL.MASK_ON:
         iou_types = iou_types + ("segm",)
@@ -100,12 +105,11 @@ def run_test(cfg, model, distributed):
             dataset_name=dataset_name,
             iou_types=iou_types,
             box_only=False if cfg.MODEL.RETINANET_ON else cfg.MODEL.RPN_ONLY,
-            device=cfg.MODEL.DEVICE,
+            device=device,
             expected_results=cfg.TEST.EXPECTED_RESULTS,
             expected_results_sigma_tol=cfg.TEST.EXPECTED_RESULTS_SIGMA_TOL,
             output_folder=output_folder,
         )
-        synchronize()
 
 
 def main():
@@ -125,6 +129,11 @@ def main():
         action="store_true",
     )
     parser.add_argument(
+        "--metrics_debug",
+        help="Whether to print debug XLA metrics",
+        action="store_true",
+    )
+    parser.add_argument(
         "opts",
         help="Modify config options using the command-line",
         default=None,
@@ -134,7 +143,7 @@ def main():
     args = parser.parse_args()
 
     num_gpus = int(os.environ["WORLD_SIZE"]) if "WORLD_SIZE" in os.environ else 1
-    args.distributed = num_gpus > 1
+    args.distributed = False
 
     if args.distributed:
         torch.cuda.set_device(args.local_rank)
@@ -164,7 +173,7 @@ def main():
         logger.info(config_str)
     logger.info("Running with config:\n{}".format(cfg))
 
-    model = train(cfg, args.local_rank, args.distributed)
+    model = train(cfg, args.local_rank, args.distributed, args.metrics_debug)
 
     if not args.skip_test:
         run_test(cfg, model, args.distributed)

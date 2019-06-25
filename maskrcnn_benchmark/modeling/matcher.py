@@ -72,8 +72,10 @@ class Matcher(object):
         between_thresholds = (matched_vals >= self.low_threshold) & (
             matched_vals < self.high_threshold
         )
-        matches[below_low_threshold] = Matcher.BELOW_LOW_THRESHOLD
-        matches[between_thresholds] = Matcher.BETWEEN_THRESHOLDS
+        below_val = torch.full_like(matches, Matcher.BELOW_LOW_THRESHOLD)
+        between_val = torch.full_like(matches, Matcher.BETWEEN_THRESHOLDS)
+        matches = torch.where(below_low_threshold, below_val, matches)
+        matches = torch.where(between_thresholds, between_val, matches)
 
         if self.allow_low_quality_matches:
             self.set_low_quality_matches_(matches, all_matches, match_quality_matrix)
@@ -90,10 +92,14 @@ class Matcher(object):
         """
         # For each gt, find the prediction with which it has highest quality
         highest_quality_foreach_gt, _ = match_quality_matrix.max(dim=1)
+        # For padding rows, highest_quality_foreach_gt are -1, set it to -2 to disable matching
+        padding = torch.full_like(highest_quality_foreach_gt, -2)
+        highest_quality_foreach_gt = torch.where(highest_quality_foreach_gt > 0,
+                                                 highest_quality_foreach_gt,
+                                                 padding)
+
         # Find highest quality match available, even if it is low, including ties
-        gt_pred_pairs_of_highest_quality = torch.nonzero(
-            match_quality_matrix == highest_quality_foreach_gt[:, None]
-        )
+        gt_pred_pairs_of_highest_quality = (match_quality_matrix == highest_quality_foreach_gt[:, None]).sum(dim=0) > 0
         # Example gt_pred_pairs_of_highest_quality:
         #   tensor([[    0, 39796],
         #           [    1, 32055],
@@ -108,5 +114,6 @@ class Matcher(object):
         # Each row is a (gt index, prediction index)
         # Note how gt items 1, 2, 3, and 5 each have two ties
 
-        pred_inds_to_update = gt_pred_pairs_of_highest_quality[:, 1]
-        matches[pred_inds_to_update] = all_matches[pred_inds_to_update]
+        # pred_inds_to_update = gt_pred_pairs_of_highest_quality[:, 1]
+        # matches[pred_inds_to_update] = all_matches[pred_inds_to_update]
+        matches = torch.where(gt_pred_pairs_of_highest_quality, all_matches, matches)

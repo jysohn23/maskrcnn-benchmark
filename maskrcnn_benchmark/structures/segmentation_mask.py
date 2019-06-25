@@ -122,6 +122,9 @@ class Polygons(object):
 
         return Polygons(scaled_polygons, size=size, mode=self.mode)
 
+    def pad(self, size):
+        self.size = size
+
     def convert(self, mode):
         width, height = self.size
         if mode == "mask":
@@ -148,7 +151,7 @@ class SegmentationMask(object):
     This class stores the segmentations for all objects in the image
     """
 
-    def __init__(self, polygons, size, mode=None):
+    def __init__(self, polygons, size, mode=None, num_gt=None):
         """
         Arguments:
             polygons: a list of list of lists of numbers. The first
@@ -161,6 +164,7 @@ class SegmentationMask(object):
         self.polygons = [Polygons(p, size, mode) for p in polygons]
         self.size = size
         self.mode = mode
+        self.num_gt = num_gt
 
     def transpose(self, method):
         if method not in (FLIP_LEFT_RIGHT, FLIP_TOP_BOTTOM):
@@ -171,20 +175,29 @@ class SegmentationMask(object):
         flipped = []
         for polygon in self.polygons:
             flipped.append(polygon.transpose(method))
-        return SegmentationMask(flipped, size=self.size, mode=self.mode)
+        return SegmentationMask(flipped, size=self.size, mode=self.mode, num_gt=self.num_gt)
 
     def crop(self, box):
         w, h = box[2] - box[0], box[3] - box[1]
         cropped = []
         for polygon in self.polygons:
             cropped.append(polygon.crop(box))
-        return SegmentationMask(cropped, size=(w, h), mode=self.mode)
+        return SegmentationMask(cropped, size=(w, h), mode=self.mode, num_gt=self.num_gt)
 
     def resize(self, size, *args, **kwargs):
         scaled = []
         for polygon in self.polygons:
             scaled.append(polygon.resize(size, *args, **kwargs))
-        return SegmentationMask(scaled, size=size, mode=self.mode)
+        return SegmentationMask(scaled, size=size, mode=self.mode, num_gt=self.num_gt)
+
+    def pad(self, size, num_segs, num_gt):
+        for polygon in self.polygons:
+            polygon.pad(size)
+        self.size = size
+        fake_polygon = Polygons([torch.zeros(4)], size = self.size, mode=self.mode)
+        for _ in range(len(self.polygons), num_segs):
+            self.polygons.append(fake_polygon)
+        self.num_gt = num_gt
 
     def to(self, *args, **kwargs):
         return self
@@ -201,7 +214,7 @@ class SegmentationMask(object):
                 item = item.tolist()
             for i in item:
                 selected_polygons.append(self.polygons[i])
-        return SegmentationMask(selected_polygons, size=self.size, mode=self.mode)
+        return SegmentationMask(selected_polygons, size=self.size, mode=self.mode, num_gt=self.num_gt)
 
     def __iter__(self):
         return iter(self.polygons)

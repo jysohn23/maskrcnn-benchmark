@@ -6,6 +6,7 @@ from torch.autograd.function import once_differentiable
 from torch.nn.modules.utils import _pair
 
 from maskrcnn_benchmark import _C
+from maskrcnn_benchmark.layers.tensor_roi_align import tensor_roi_align
 
 
 class _ROIAlign(Function):
@@ -55,6 +56,13 @@ class ROIAlign(nn.Module):
         self.sampling_ratio = sampling_ratio
 
     def forward(self, input, rois):
+        if self.sampling_ratio > 0 and input.device.type == 'xla':
+            batch_size = input.size(0)
+            num_rois = rois.size(0)
+            rois = rois[:, 1:].reshape(batch_size, num_rois, -1)
+            return tensor_roi_align(
+                input, rois, self.output_size, self.spatial_scale, self.sampling_ratio
+            )
         return roi_align(
             input, rois, self.output_size, self.spatial_scale, self.sampling_ratio
         )

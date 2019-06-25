@@ -5,6 +5,8 @@ import time
 
 import torch
 import torch.distributed as dist
+import torch_xla
+import torch_xla_py.xla_model as xm
 
 from maskrcnn_benchmark.utils.comm import get_world_size
 from maskrcnn_benchmark.utils.metric_logger import MetricLogger
@@ -44,6 +46,7 @@ def do_train(
     device,
     checkpoint_period,
     arguments,
+    metrics_debug,
 ):
     logger = logging.getLogger("maskrcnn_benchmark.trainer")
     logger.info("Start training")
@@ -74,10 +77,13 @@ def do_train(
 
         optimizer.zero_grad()
         losses.backward()
-        optimizer.step()
+        xm.optimizer_step(optimizer)
 
         batch_time = time.time() - end
         end = time.time()
+        if metrics_debug:
+            print(torch_xla._XLAC._xla_metrics_report())
+
         meters.update(time=batch_time, data=data_time)
 
         eta_seconds = meters.time.global_avg * (max_iter - iteration)
@@ -91,14 +97,14 @@ def do_train(
                         "iter: {iter}",
                         "{meters}",
                         "lr: {lr:.6f}",
-                        "max mem: {memory:.0f}",
+                        "time_elapsed_sec: {time_elapsed}"
                     ]
                 ).format(
                     eta=eta_string,
                     iter=iteration,
                     meters=str(meters),
                     lr=optimizer.param_groups[0]["lr"],
-                    memory=torch.cuda.max_memory_allocated() / 1024.0 / 1024.0,
+                    time_elapsed=time.time()-start_training_time,
                 )
             )
         if iteration % checkpoint_period == 0:
