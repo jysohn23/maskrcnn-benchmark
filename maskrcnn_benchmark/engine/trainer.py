@@ -7,6 +7,7 @@ import torch
 import torch.distributed as dist
 import torch_xla
 import torch_xla_py.xla_model as xm
+import torch_xla_py.data_parallel as dp
 
 from maskrcnn_benchmark.utils.comm import get_world_size
 from maskrcnn_benchmark.utils.metric_logger import MetricLogger
@@ -119,3 +120,95 @@ def do_train(
             total_time_str, total_training_time / (max_iter)
         )
     )
+
+
+def do_train_tpu(
+    model,
+    cfg,
+    data_loader,
+    optimizer,
+    scheduler,
+    checkpointer,
+    checkpoint_period,
+    arguments,
+    metrics_debug
+):
+    # Build model for distributed TPU training.
+    devices = xm.get_xla_supported_devices(max_devices=cfg.NUM_CORES)
+    parallel_model = dp.DataParallel(model, device_ids=devices)
+
+    def train_loop_fn(model, loader, device, context):
+        print("starting train_loop_fn on device: {}".format(device))
+        logger = logging.getLogger("maskrcnn_benchmark.trainer")
+        logger.info("Start training")
+        meters = MetricLogger(delimiter="  ")
+        max_iter = len(data_loader)
+        start_iter = arguments["iteration"]
+        start_training_time = time.time()
+        end = time.time()
+        tracker = xm.RateTracker()
+
+        for iteration, (images, targets, _) in loader:
+            data_time = time.time() - end
+            iteration += 1
+            # arguments["iteration"] = iteration
+
+            scheduler.step()
+
+            # TODO(jysohn): check if sending explicitly to device is needed
+            images = images.to(device)
+            targets = [target.to(device) for target in targets]
+
+            optimizer.zero_grad()
+
+            loss_dict = model(images, targets)
+            losses = sum(loss for loss in loss_dict.values())
+
+            # reduce losses over all devices for logging purposes
+            loss_dict_reduced = reduce_loss_dict(loss_dict)
+            losses_reduced = sum(loss for loss in loss_dict_reduced.values())
+            meters.update(loss=losses_reduced, **loss_dict_reduced)
+
+            losses.backward()
+            xm.optimizer_step(optimizer)
+            tracker.add(cfg.SOLVER.IMS_PER_BATCH)
+
+            batch_time = time.time() - end
+            end = time.time()
+            if metrics_debug:
+                print(torch_xla._XLAC._xla_metrics_report())
+
+            meters.update(time=batch_time, data=data_time)
+
+            eta_seconds = meters.time.global_avg * (max_iter - iteration)
+            eta_string = str(datetime.timedelta(seconds=int(eta_seconds)))
+
+            # if iteration % 20 == 0 or iteration == max_iter:
+            if iteration % 1 == 0 or iteration == max_iter:
+                logger.info(
+                    meters.delimiter.join(
+                        [
+                            "[{device}]({iter})",
+                            "eta: {eta}",
+                            "{meters}",
+                            "lr: {lr:.6f}",
+                            "time_elapsed_sec: {time_elapsed:.2f}"
+                        ]
+                    ).format(
+                        eta=eta_string,
+                        iter=iteration,
+                        meters=str(meters),
+                        lr=optimizer.param_groups[0]["lr"],
+                        time_elapsed=time.time()-start_training_time,
+                        device=device,
+                    )
+                )
+            # if iteration % checkpoint_period == 0:
+            #     checkpointer.save("model_{:07d}".format(iteration), **arguments)
+            # if iteration == max_iter:
+            #     checkpointer.save("model_final", **arguments)
+
+    print("debug => calling DataParallel.__call__")
+    result = parallel_model(train_loop_fn, data_loader)
+    print("debug => result == {}".format(result))
+

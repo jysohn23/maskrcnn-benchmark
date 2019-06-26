@@ -20,6 +20,7 @@ from maskrcnn_benchmark.solver import make_lr_scheduler
 from maskrcnn_benchmark.solver import make_optimizer
 from maskrcnn_benchmark.engine.inference import inference
 from maskrcnn_benchmark.engine.trainer import do_train
+from maskrcnn_benchmark.engine.trainer import do_train_tpu
 from maskrcnn_benchmark.modeling.detector import build_detection_model
 from maskrcnn_benchmark.utils.checkpoint import DetectronCheckpointer
 from maskrcnn_benchmark.utils.collect_env import collect_env_info
@@ -27,6 +28,41 @@ from maskrcnn_benchmark.utils.comm import synchronize, get_rank
 from maskrcnn_benchmark.utils.imports import import_file
 from maskrcnn_benchmark.utils.logger import setup_logger
 from maskrcnn_benchmark.utils.miscellaneous import mkdir
+
+
+def train_tpu(cfg, metrics_debug):
+    model = build_detection_model(cfg)
+    optimizer = make_optimizer(cfg, model)
+    scheduler = make_lr_scheduler(cfg, optimizer)
+
+    arguments = {}
+    arguments["iteration"] = 0
+    output_dir = cfg.OUTPUT_DIR
+    save_to_disk = get_rank() == 0
+    checkpointer = DetectronCheckpointer(
+        cfg, model, optimizer, scheduler, output_dir, save_to_disk
+    )
+    extra_checkpoint_data = checkpointer.load(cfg.MODEL.WEIGHT)
+    arguments.update(extra_checkpoint_data)
+    checkpoint_period = cfg.SOLVER.CHECKPOINT_PERIOD
+
+    data_loader = make_data_loader(
+        cfg,
+        is_train=True,
+        start_iter=arguments["iteration"])
+
+    do_train_tpu(
+        model,
+        cfg,
+        data_loader,
+        optimizer,
+        scheduler,
+        checkpointer,
+        checkpoint_period,
+        arguments,
+        metrics_debug
+    )
+    return model
 
 
 def train(cfg, local_rank, distributed, metrics_debug):
@@ -134,6 +170,12 @@ def main():
         action="store_true",
     )
     parser.add_argument(
+        "--use_tpu",
+        default=True,
+        help="Whether to use TPU for training.",
+        type=bool,
+    )
+    parser.add_argument(
         "opts",
         help="Modify config options using the command-line",
         default=None,
@@ -173,7 +215,10 @@ def main():
         logger.info(config_str)
     logger.info("Running with config:\n{}".format(cfg))
 
-    model = train(cfg, args.local_rank, args.distributed, args.metrics_debug)
+    if args.use_tpu:
+        train_tpu(cfg, args.metrics_debug)
+    else:
+        model = train(cfg, args.local_rank, args.distributed, args.metrics_debug)
 
     if not args.skip_test:
         run_test(cfg, model, args.distributed)
