@@ -59,9 +59,24 @@ class ROIAlign(nn.Module):
         if self.sampling_ratio > 0 and input.device.type == 'xla':
             batch_size = input.size(0)
             num_rois = rois.size(0)
-            import pdb
-            pdb.set_trace()
-            rois = rois[:, 1:].reshape(batch_size, num_rois, -1)
+
+            # num_rois
+            # batch_size: 1
+                # rois.shape: [512, 5]
+                # num_rois: 512
+                # rois.shape after reshape: [1, 512, 4]
+                    # want: [batch_size, num_rois, 4]
+            # batch_size: 2
+                # rois.shape before reshape: [1024, 5]
+                # num_rois: 1024
+                # rois.shape after reshape: [2, 1024, 2]
+
+
+            # before:
+            # rois = rois[:, 1:].reshape(batch_size, num_rois, -1)
+            # fixed:
+            rois = rois[:, 1:].reshape(batch_size, -1, 4)
+
             return tensor_roi_align(
                 input, rois, self.output_size, self.spatial_scale, self.sampling_ratio
             )

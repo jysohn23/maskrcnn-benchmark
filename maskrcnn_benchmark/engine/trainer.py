@@ -137,12 +137,13 @@ def do_train_tpu(
     devices = xm.get_xla_supported_devices(max_devices=cfg.NUM_CORES)
     parallel_model = dp.DataParallel(model, device_ids=devices)
 
+    logger = logging.getLogger("maskrcnn_benchmark.trainer")
+    logger.info("Start training")
+    meters = MetricLogger(delimiter="  ")
+
     def train_loop_fn(model, loader, device, context):
         print("starting train_loop_fn on device: {}".format(device))
-        logger = logging.getLogger("maskrcnn_benchmark.trainer")
-        logger.info("Start training")
-        meters = MetricLogger(delimiter="  ")
-        max_iter = len(data_loader)
+        max_iter = len(data_loader) / cfg.NUM_CORES
         start_iter = arguments["iteration"]
         start_training_time = time.time()
         end = time.time()
@@ -192,7 +193,8 @@ def do_train_tpu(
                             "eta: {eta}",
                             "{meters}",
                             "lr: {lr:.6f}",
-                            "time_elapsed_sec: {time_elapsed:.2f}"
+                            "time_elapsed_sec: {time_elapsed:.2f}",
+                            "rate: {rate}",
                         ]
                     ).format(
                         eta=eta_string,
@@ -201,6 +203,7 @@ def do_train_tpu(
                         lr=optimizer.param_groups[0]["lr"],
                         time_elapsed=time.time()-start_training_time,
                         device=device,
+                        rate=tracker.rate(),
                     )
                 )
             # if iteration % checkpoint_period == 0:
