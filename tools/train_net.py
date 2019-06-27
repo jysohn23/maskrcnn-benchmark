@@ -65,10 +65,9 @@ def train_tpu(cfg, metrics_debug):
     return model
 
 
-def train(cfg, local_rank, distributed, metrics_debug):
+def train(cfg, local_rank, distributed):
     model = build_detection_model(cfg)
-    device = xm.xla_device()
-    torch_xla._XLAC._xla_set_default_device(str(device))
+    device = torch.device(cfg.MODEL.DEVICE)
     model.to(device)
 
     optimizer = make_optimizer(cfg, model)
@@ -111,7 +110,6 @@ def train(cfg, local_rank, distributed, metrics_debug):
         device,
         checkpoint_period,
         arguments,
-        metrics_debug,
     )
 
     return model

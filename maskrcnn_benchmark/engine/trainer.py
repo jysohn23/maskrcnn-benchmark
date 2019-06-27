@@ -47,7 +47,6 @@ def do_train(
     device,
     checkpoint_period,
     arguments,
-    metrics_debug,
 ):
     logger = logging.getLogger("maskrcnn_benchmark.trainer")
     logger.info("Start training")
@@ -78,19 +77,16 @@ def do_train(
 
         optimizer.zero_grad()
         losses.backward()
-        xm.optimizer_step(optimizer)
+        optimizer.step()
 
         batch_time = time.time() - end
         end = time.time()
-        if metrics_debug:
-            print(torch_xla._XLAC._xla_metrics_report())
-
         meters.update(time=batch_time, data=data_time)
 
         eta_seconds = meters.time.global_avg * (max_iter - iteration)
         eta_string = str(datetime.timedelta(seconds=int(eta_seconds)))
 
-        if iteration % 20 == 0 or iteration == max_iter:
+        if iteration % 1 == 0 or iteration == max_iter:
             logger.info(
                 meters.delimiter.join(
                     [
@@ -98,14 +94,14 @@ def do_train(
                         "iter: {iter}",
                         "{meters}",
                         "lr: {lr:.6f}",
-                        "time_elapsed_sec: {time_elapsed}"
+                        "max mem: {memory:.0f}",
                     ]
                 ).format(
                     eta=eta_string,
                     iter=iteration,
                     meters=str(meters),
                     lr=optimizer.param_groups[0]["lr"],
-                    time_elapsed=time.time()-start_training_time,
+                    memory=torch.cuda.max_memory_allocated() / 1024.0 / 1024.0,
                 )
             )
         if iteration % checkpoint_period == 0:
@@ -152,11 +148,10 @@ def do_train_tpu(
         for iteration, (images, targets, _) in loader:
             data_time = time.time() - end
             iteration += 1
-            # arguments["iteration"] = iteration
+            arguments["iteration"] = iteration
 
             scheduler.step()
 
-            # TODO(jysohn): check if sending explicitly to device is needed
             images = images.to(device)
             targets = [target.to(device) for target in targets]
 
@@ -206,10 +201,10 @@ def do_train_tpu(
                         rate=tracker.rate(),
                     )
                 )
-            # if iteration % checkpoint_period == 0:
-            #     checkpointer.save("model_{:07d}".format(iteration), **arguments)
-            # if iteration == max_iter:
-            #     checkpointer.save("model_final", **arguments)
+            if iteration % checkpoint_period == 0:
+                checkpointer.save("model_{:07d}".format(iteration), **arguments)
+            if iteration == max_iter:
+                checkpointer.save("model_final", **arguments)
 
     print("debug => calling DataParallel.__call__")
     result = parallel_model(train_loop_fn, data_loader)
