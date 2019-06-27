@@ -32,34 +32,16 @@ from maskrcnn_benchmark.utils.miscellaneous import mkdir
 
 def train_tpu(cfg, metrics_debug):
     model = build_detection_model(cfg)
-    optimizer = make_optimizer(cfg, model)
-    scheduler = make_lr_scheduler(cfg, optimizer)
-
-    arguments = {}
-    arguments["iteration"] = 0
-    output_dir = cfg.OUTPUT_DIR
-    save_to_disk = get_rank() == 0
-    checkpointer = DetectronCheckpointer(
-        cfg, model, optimizer, scheduler, output_dir, save_to_disk
-    )
-    extra_checkpoint_data = checkpointer.load(cfg.MODEL.WEIGHT)
-    arguments.update(extra_checkpoint_data)
-    checkpoint_period = cfg.SOLVER.CHECKPOINT_PERIOD
 
     data_loader = make_data_loader(
         cfg,
         is_train=True,
-        start_iter=arguments["iteration"])
+        start_iter=0)
 
     do_train_tpu(
         model,
         cfg,
         data_loader,
-        optimizer,
-        scheduler,
-        checkpointer,
-        checkpoint_period,
-        arguments,
         metrics_debug
     )
     return model
@@ -67,7 +49,8 @@ def train_tpu(cfg, metrics_debug):
 
 def train(cfg, local_rank, distributed):
     model = build_detection_model(cfg)
-    device = torch.device(cfg.MODEL.DEVICE)
+    device = xm.xla_device()
+    torch_xla._XLAC._xla_set_default_device(str(device))
     model.to(device)
 
     optimizer = make_optimizer(cfg, model)
@@ -168,10 +151,9 @@ def main():
         action="store_true",
     )
     parser.add_argument(
-        "--use_tpu",
-        default=True,
-        help="Whether to use TPU for training.",
-        type=bool,
+        "--no_data_parallel",
+        help="Whether to use data_parallel pytorch/xla framework",
+        action="store_true",
     )
     parser.add_argument(
         "opts",
@@ -213,11 +195,12 @@ def main():
         logger.info(config_str)
     logger.info("Running with config:\n{}".format(cfg))
 
-    if args.use_tpu:
-        train_tpu(cfg, args.metrics_debug)
+    if args.no_data_parallel:
+        model = train(cfg, args.local_rank, args.distributed)
     else:
-        model = train(cfg, args.local_rank, args.distributed, args.metrics_debug)
+        model = train_tpu(cfg, args.metrics_debug)
 
+    args.skip_test = True
     if not args.skip_test:
         run_test(cfg, model, args.distributed)
 
