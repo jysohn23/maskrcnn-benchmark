@@ -130,12 +130,11 @@ def do_train_tpu(
     # Build model for distributed TPU training.
     devices = xm.get_xla_supported_devices(max_devices=cfg.NUM_CORES)
     parallel_model = dp.DataParallel(model, device_ids=devices)
-
-    per_core_max_iter = len(data_loader) / cfg.NUM_CORES
+    per_core_max_iter = int(len(data_loader) / cfg.NUM_CORES)
 
     def train_loop_fn(model, loader, device, context):
         logger = logging.getLogger("maskrcnn_benchmark.trainer")
-        logger.info("Start training")
+        logger.info("starting train_loop_fn on device: {}".format(device))
         meters = MetricLogger(delimiter="  ")
 
         # Create optimizer and schedule lr
@@ -152,9 +151,6 @@ def do_train_tpu(
         )
         extra_checkpoint_data = checkpointer.load(cfg.MODEL.WEIGHT)
         arguments.update(extra_checkpoint_data)
-
-        print("starting train_loop_fn on device: {}".format(device))
-        start_iter = arguments["iteration"]
         start_training_time = time.time()
         end = time.time()
         tracker = xm.RateTracker()
@@ -165,17 +161,17 @@ def do_train_tpu(
             arguments["iteration"] = iteration
 
             scheduler.step()
-
             images = images.to(device)
             targets = [target.to(device) for target in targets]
 
             loss_dict = model(images, targets)
+            # l = l_mask + l_bbox + l_class
             losses = sum(loss for loss in loss_dict.values())
 
-            # reduce losses over all devices for logging purposes
-            loss_dict_reduced = reduce_loss_dict(loss_dict)
-            losses_reduced = sum(loss for loss in loss_dict_reduced.values())
-            meters.update(loss=losses_reduced, **loss_dict_reduced)
+            # No need for TPUs reduce losses over devices as we loop per device.
+            # loss_dict_reduced = reduce_loss_dict(loss_dict)
+            # losses_reduced = sum(loss for loss in loss_dict_reduced.values())
+            meters.update(loss=losses, **loss_dict)
 
             optimizer.zero_grad()
             losses.backward()
@@ -196,12 +192,12 @@ def do_train_tpu(
                 logger.info(
                     meters.delimiter.join(
                         [
-                            "[{device}]({iter})",
+                            "[{device}]({iter}/{per_core_max_iter})",
                             "eta: {eta}",
                             "{meters}",
                             "lr: {lr:.6f}",
                             "time_elapsed_sec: {time_elapsed:.2f}",
-                            "rate: {rate}",
+                            "rate: {rate:.2} img/sec",
                         ]
                     ).format(
                         eta=eta_string,
@@ -211,6 +207,7 @@ def do_train_tpu(
                         time_elapsed=time.time()-start_training_time,
                         device=device,
                         rate=tracker.rate(),
+                        per_core_max_iter=per_core_max_iter,
                     )
                 )
             if iteration % cfg.SOLVER.CHECKPOINT_PERIOD == 0:
